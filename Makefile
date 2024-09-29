@@ -1,7 +1,16 @@
-all : main.exe
+.PHONY: all clean
+HEADERS = btf.h
+SRCS = 	 btf.c main.c
 
-main.exe : main.c btf.c
-	gcc -Wall -g -o $@ $^
+CFLAGS = -Wall -g
 
-clean :
-	rm -f main.exe
+OBJS = $(SRCS:.c=.o)
+
+%.o: %.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+all: $(OBJS)
+	$(CC) -o btf $(OBJS) $(LDFLAGS)
+
+clean:
+	rm -f $(OBJS) btf

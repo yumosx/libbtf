@@ -99,6 +99,49 @@ static int btf_parse_type_sec(struct btf *btf) {
 	return 0;
 }
 
+struct btf_type* btf_type_by_id(const struct btf* btf, __u32 type_id) {
+	if (type_id == 0)
+		return &btf_void;
+	
+	if (type_id < btf->start_id)
+		return btf_type_by_id(btf->base_btf, type_id);
+	
+	return btf->types_data + btf->type_offs[type_id-btf->start_id];
+}
+
+
+
+static int btf_sanity_check(const struct btf* btf) {
+	const struct btf_type* t;
+	__u32 i, n = btf__type_cnt(btf);
+	int err;
+
+	for (i = btf->start_id; i < n; i++) {
+		t = btf_type_by_id(btf, i);
+		err = btf_validate_type(btf, t, i);
+		if (err)
+			return err;
+	}
+	return 0;
+
+}
+
+static int btf_validate_type(const struct btf* btf, const struct btf_type* t, __u32 id) {
+	__u32 kind = btf_kind(t);
+
+	switch (kind) {
+	case BTF_KIND_UNKN:
+	case BTF_KIND_INT:
+	case BTF_KIND_FWD:
+	case BTF_KIND_FLOAT:
+		break;
+	case BTF_KIND_PTR:
+	case BTF_KIND_TYPEDEF:
+	default:
+		break;
+	}
+	return 0;
+}
 
 static struct btf* btf_new(const void* data, __u32 size, struct btf* base_btf) {
     struct btf* btf;
@@ -121,15 +164,58 @@ static struct btf* btf_new(const void* data, __u32 size, struct btf* base_btf) {
 
     btf->hdr = btf->raw_data;
     err = btf_parse_hdr(btf);
+    if (err)
+        goto done;
+    
+    btf->strs_data = btf->raw_data + btf->hdr->hdr_len + btf->hdr->str_off;
+    btf->type_data = btf->raw_data + btf->hdr->hdr_len + btf->hdr->type_off;
+    
+    
+    err = btf_parse_type_sec(btf);
     err = err ? : btf_parse_type_sec(btf);
+	err = err ? : btf_sanity_check(btf);
 
-
+	if (err)
+		goto done;
 
 
     return btf;
 done:
+	if (err) {
+		btf__free(btf);
+		return NULL;
+	}
+
     return NULL;
 }
+
+
+static bool btf_is_modifiable(const struct btf *btf) {
+	return (void *)btf->hdr != btf->raw_data;
+}
+
+void btf__free(struct btf *btf) {
+	
+	if (IS_ERR_OR_NULL(btf))
+		return;
+
+	if (btf->fd >= 0)
+		close(btf->fd);
+
+	if (btf_is_modifiable(btf)) {
+		free(btf->hdr);
+		free(btf->types_data);
+		//strset__free(btf->strs_set);
+	}
+	free(btf->raw_data);
+	free(btf->raw_data_swapped);
+	free(btf->type_offs);
+	if (btf->owns_base)
+		btf__free(btf->base_btf);
+	free(btf);
+}
+
+
 
 static struct btf* btf_parse_raw(const char* path) {
     struct btf* btf = NULL;

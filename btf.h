@@ -7,6 +7,10 @@
 #include <byteswap.h>
 #include <linux/types.h>
 
+
+static struct btf_type btf_void;
+
+
 struct btf {
 	/* raw BTF data in native endianness */
 	void *raw_data;
@@ -92,7 +96,7 @@ struct btf {
 	void *strs_data;
 	/* a set of unique strings */
 	
-	//!struct strset *strs_set;
+	//struct strset *strs_set;
 	
 	/* whether strings are already deduplicated */
 	bool strs_deduped;
